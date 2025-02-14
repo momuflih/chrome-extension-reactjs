@@ -1,0 +1,110 @@
+// manifest.json
+{
+  "manifest_version": 3,
+  "name": "Productivity Tracker",
+  "version": "1.0",
+  "description": "Track your time on websites and set productivity goals.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "index.html",
+    "default_icon": "icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
+}
+
+// background.js
+let activeTab = {};
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  const tab = await chrome.tabs.get(activeInfo.tabId);
+  activeTab = { url: tab.url, startTime: Date.now() };
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (activeTab.url) {
+    const timeSpent = Date.now() - activeTab.startTime;
+    chrome.storage.local.get([activeTab.url], (data) => {
+      let totalTime = data[activeTab.url] || 0;
+      chrome.storage.local.set({ [activeTab.url]: totalTime + timeSpent });
+    });
+  }
+});
+
+// content.js
+console.log("Productivity Tracker Active");
+
+// src/components/Popup.js
+import React, { useState, useEffect } from "react";
+import GoalSetter from "./GoalSetter";
+import StatsChart from "./StatsChart";
+
+const Popup = () => {
+  return (
+    <div>
+      <h1>Productivity Tracker</h1>
+      <GoalSetter />
+      <StatsChart />
+    </div>
+  );
+};
+
+export default Popup;
+
+// src/components/GoalSetter.js
+import React, { useState } from "react";
+
+const GoalSetter = () => {
+  const [goal, setGoal] = useState(0);
+
+  return (
+    <div>
+      <h2>Set Your Daily Goal (minutes)</h2>
+      <input type="number" value={goal} onChange={(e) => setGoal(e.target.value)} />
+      <button onClick={() => chrome.storage.local.set({ goal })}>Save Goal</button>
+    </div>
+  );
+};
+
+export default GoalSetter;
+
+// src/components/StatsChart.js
+import React, { useState, useEffect } from "react";
+import { Bar } from "react-chartjs-2";
+
+const StatsChart = () => {
+  const [data, setData] = useState({});
+
+  useEffect(() => {
+    chrome.storage.local.get(null, (items) => {
+      setData({
+        labels: Object.keys(items),
+        datasets: [
+          {
+            label: "Time Spent (ms)",
+            data: Object.values(items),
+            backgroundColor: "rgba(75,192,192,0.6)",
+          },
+        ],
+      });
+    });
+  }, []);
+
+  return <Bar data={data} />;
+};
+
+export default StatsChart;
+
+// index.js
+import React from "react";
+import ReactDOM from "react-dom";
+import Popup from "./components/Popup";
+
+ReactDOM.render(<Popup />, document.getElementById("root"));
